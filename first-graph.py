@@ -63,7 +63,7 @@ def gpt_query():
     prompt = prompt_template.format(user_query=user_query)
 
     response = openai.chat.completions.create(
-        model="gpt-4",
+        model="gpt-4o",
         messages=[
             {"role": "system", "content": "You are a helpful assistant that converts natural language to Cypher queries for Neo4j."},
             {"role": "user", "content": prompt}
