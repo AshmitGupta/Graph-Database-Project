@@ -15,9 +15,13 @@ password = os.getenv("NEO4J_PASSWORD")
 driver = GraphDatabase.driver(uri, auth=(username, password))
 
 def run_query(query):
-    with driver.session() as session:
-        result = session.run(query)
-        return [record.data() for record in result]
+    try:
+        with driver.session() as session:
+            result = session.run(query)
+            return [record.data() for record in result]
+    except Exception as e:
+        app.logger.error(f"Error running query: {str(e)}")
+        return None
 
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
@@ -62,23 +66,39 @@ def gpt_query():
 
     prompt = prompt_template.format(user_query=user_query)
 
-    response = openai.chat.completions.create(
-        model="gpt-4o",
-        messages=[
-            {"role": "system", "content": "You are a helpful assistant that converts natural language to Cypher queries for Neo4j."},
-            {"role": "user", "content": prompt}
-        ],
-        temperature=0.7,
-        max_tokens=150,
-        top_p=1
-    )
-
-    cypher_query = response.choices[0].message.content.strip()
-
     try:
+        response = openai.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant that converts natural language to Cypher queries for Neo4j."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.7,
+            max_tokens=150,
+            top_p=1
+        )
+
+        cypher_query = response.choices[0].message.content.strip()
         result = run_query(cypher_query)
-        return jsonify(result)
+        if result is None:
+            return jsonify({"error": "Error running query"}), 500
+
+        gpt4_response = openai.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant that converts database results into natural language explanations."},
+                {"role": "user", "content": prompt},
+                {"role": "user", "content": f"Translate the following database result into a natural language explanation: Keep the answer brief and short. And just the answer. Don't give extra info than the question asked. \n\n{result}"}
+            ],
+            temperature=0.7,
+            max_tokens=150,
+            top_p=1
+        )
+
+        explanation = gpt4_response.choices[0].message.content.strip()
+        return jsonify({"explanation": explanation})
     except Exception as e:
+        app.logger.error(f"Error processing query: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
