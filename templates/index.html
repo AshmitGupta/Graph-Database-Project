@@ -7,13 +7,18 @@
     <link rel="stylesheet" href="static/style.css">
 </head>
 <body>
-    <div class="container">
-        <h1>Neo4j Query Interface</h1>
-        <form id="query-form">
-            <input type="text" id="query-input" placeholder="Enter your query here" required>
-            <button type="submit">Submit</button>
-        </form>
-        <div id="results"></div>
+    <div class="chat-container">
+        <div class="chat-header">
+            <h1>Chat Interface</h1>
+        </div>
+        <div class="chat-body" id="results">
+        </div>
+        <div class="chat-footer">
+            <form id="query-form">
+                <input type="text" id="query-input" placeholder="Enter your query here" required>
+                <button type="submit">Send</button>
+            </form>
+        </div>
     </div>
     <script src="static/script.js"></script>
 </body>
