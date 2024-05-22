@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Neo4j Query Interface</title>
+    <title>Chat Interface</title>
     <link rel="stylesheet" href="static/style.css">
 </head>
 <body>
@@ -16,7 +16,11 @@
         <div class="chat-footer">
             <form id="query-form">
                 <input type="text" id="query-input" placeholder="Enter your query here" required>
-                <button type="submit">Send</button>
+                <label for="image-input" class="file-label">
+                    <img src="static/clip-icon.svg" alt="Attach" class="clip-icon">
+                </label>
+                <input type="file" id="image-input" accept="image/*">
+                <button type="submit" id="send-button">Send</button>
             </form>
         </div>
     </div>
