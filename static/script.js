@@ -1,3 +1,12 @@
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+const recognition = new SpeechRecognition();
+let isRecording = false;
+
+// Configure recognition settings
+recognition.continuous = false;
+recognition.interimResults = false;
+recognition.lang = 'en-US';
+
 document.getElementById('query-form').addEventListener('submit', async function (e) {
     e.preventDefault();
     
@@ -106,8 +115,8 @@ document.getElementById('query-form').addEventListener('submit', async function 
         }
 
         queryInput.value = '';
-        sendButton.disabled = false;
     }
+    sendButton.disabled = false;
 });
 
 document.getElementById('image-input').addEventListener('change', function () {
@@ -116,3 +125,49 @@ document.getElementById('image-input').addEventListener('change', function () {
         queryInput.value = this.files[0].name;
     }
 });
+
+document.getElementById('audio-label').addEventListener('click', function () {
+    const queryInput = document.getElementById('query-input');
+    if (!isRecording) {
+        console.log('Starting recording...');
+        recognition.start();
+        isRecording = true;
+        document.getElementById('audio-label').classList.add('recording');
+        queryInput.placeholder = "Recording...";
+    } else {
+        console.log('Stopping recording...');
+        recognition.stop();
+        isRecording = false;
+        document.getElementById('audio-label').classList.remove('recording');
+        queryInput.placeholder = "Enter your query here";
+    }
+});
+
+recognition.onresult = function (event) {
+    console.log('Recognition result event:', event);
+    const transcript = event.results[0][0].transcript;
+    console.log('Transcript:', transcript);
+    const queryInput = document.getElementById('query-input');
+    queryInput.value = transcript;
+    recognition.stop(); // Ensure recognition is stopped after result
+    isRecording = false;
+    document.getElementById('audio-label').classList.remove('recording');
+    queryInput.placeholder = "Enter your query here";
+};
+
+recognition.onspeechend = function() {
+    console.log('Speech has ended');
+    recognition.stop();
+    isRecording = false;
+    document.getElementById('audio-label').classList.remove('recording');
+    const queryInput = document.getElementById('query-input');
+    queryInput.placeholder = "Enter your query here";
+};
+
+recognition.onerror = function (event) {
+    console.error('Speech recognition error detected:', event.error);
+    const queryInput = document.getElementById('query-input');
+    queryInput.placeholder = "Error in recording. Try again.";
+    isRecording = false;
+    document.getElementById('audio-label').classList.remove('recording');
+};

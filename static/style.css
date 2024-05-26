@@ -73,6 +73,16 @@ body {
     height: 24px;
 }
 
+.chat-footer .audio-icon {
+    width: 24px;
+    height: 24px;
+}
+
+.chat-footer .recording .audio-icon {
+    border: 2px solid red;
+    border-radius: 50%;
+}
+
 .chat-footer button {
     padding: 10px 20px;
     border: none;
