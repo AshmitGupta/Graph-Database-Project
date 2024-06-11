@@ -1,5 +1,5 @@
 from flask import Flask, request, jsonify, render_template
-from neo4j import GraphDatabase
+from neo4j import GraphDatabase, TRUST_SYSTEM_CA_SIGNED_CERTIFICATES
 import openai
 from dotenv import load_dotenv
 import os
@@ -9,12 +9,22 @@ load_dotenv()
 
 app = Flask(__name__)
 logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.DEBUG)
+
+# uri = os.getenv("NEO4J_URI")
+# username = os.getenv("NEO4J_USERNAME")
+# password = os.getenv("NEO4J_PASSWORD")
 
 uri = os.getenv("NEO4J_URI")
 username = os.getenv("NEO4J_USERNAME")
 password = os.getenv("NEO4J_PASSWORD")
 
-driver = GraphDatabase.driver(uri, auth=(username, password))
+driver = None
+try:
+    driver = GraphDatabase.driver(uri, auth=(username, password))
+    logger.info("Neo4j driver created successfully")
+except Exception as e:
+    logger.error(f"Error creating Neo4j driver: {str(e)}")
 
 def run_query(query):
     try:
@@ -22,7 +32,7 @@ def run_query(query):
             result = session.run(query)
             return [record.data() for record in result]
     except Exception as e:
-        app.logger.error(f"Error running query: {str(e)}")
+        logger.error(f"Error running query: {str(e)}")
         return None
 
 openai.api_key = os.getenv("OPENAI_API_KEY")
@@ -47,30 +57,30 @@ def gpt4_chat():
     You are an AI assistant that helps translate natural language queries into Cypher queries for a Neo4j graph database. Here is the schema of the database:
 
     Nodes:
-    - PLAYER: {{name, age, number, height, weight}}
-    - COACH: {{name}}
-    - TEAM: {{name}}
+    - ServiceBulletin: {{number, subject, issueDate}}
+    - Section: {{name}}
+    - Subsection: {{name, info}}
 
     Relationships:
-    - TEAMMATES: between PLAYER and PLAYER
-    - COACHES: from COACH to PLAYER
-    - PLAYS_FOR: from PLAYER to TEAM {{salary}}
-    - COACHES_FOR: from COACH to TEAM
-    - PLAYED_AGAINST: from PLAYER to TEAM {{minutes, points, assists, rebounds, turnovers}}
+    - HAS_SECTION: from ServiceBulletin to Section
+    - HAS_SUBSECTION: from Section to Subsection
 
     Here is the chat history:
     {chat_history}
 
     Examples:
 
-    1. Natural Language: "Show all players coached by Frank Vogel"
-       Cypher Query: MATCH (c:COACH {{name: "Frank Vogel"}})-[:COACHES]->(p:PLAYER) RETURN p.name, p.age, p.number, p.height, p.weight
+    1. Natural Language: "List all sections in the service bulletin 737-00-1028"
+    Cypher Query: MATCH (sb:ServiceBulletin {{number: "737-00-1028"}})-[:HAS_SECTION]->(s:Section) RETURN s.name
 
-    2. Natural Language: "List all teammates of LeBron James"
-       Cypher Query: MATCH (p:PLAYER {{name: "LeBron James"}})-[:TEAMMATES]-(teammate:PLAYER) RETURN teammate.name, teammate.age, teammate.number, teammate.height, teammate.weight
+    2. Natural Language: "Show all subsections under PLANNING INFORMATION"
+    Cypher Query: MATCH (sec:Section {{name: "PLANNING INFORMATION"}})-[:HAS_SUBSECTION]->(sub:Subsection) RETURN sub.name, sub.info
+
+    3. Natural Language: "What is the information for the Effectivity subsection?"
+    Cypher Query: MATCH (sub:Subsection {{name: "Effectivity"}}) RETURN sub.info
 
     Convert the last user query into a Cypher query for the Neo4j database:
-    JUST RETURNT THE QUERY AND NOTHING ELSE.
+    JUST RETURN THE QUERY AND NOTHING ELSE.
     Cypher Query:
 
     """
@@ -113,7 +123,7 @@ def gpt4_chat():
         explanation = gpt4_response_final.choices[0].message.content.strip()
         return jsonify({"explanation": explanation})
     except Exception as e:
-        app.logger.error(f"Error processing chat: {str(e)}")
+        logger.error(f"Error processing chat: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
