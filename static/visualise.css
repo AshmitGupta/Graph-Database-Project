@@ -1,0 +1,68 @@
+body {
+    font-family: Arial, sans-serif;
+    background-color: #f4f4f4;
+    margin: 0;
+    padding: 0;
+}
+
+.container {
+    max-width: 800px;
+    margin: 50px auto;
+    background: #fff;
+    padding: 20px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    border-radius: 10px;
+}
+
+h1 {
+    text-align: center;
+    color: #333;
+    margin-bottom: 20px;
+}
+
+.file-input-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;  /* Add space between the buttons */
+    margin-bottom: 20px;
+}
+
+.file-input-container input[type="file"] {
+    display: none;
+}
+
+.file-input-container label, .file-input-container button {
+    font-size: 16px;  /* Ensure both buttons have the same text size */
+    padding: 10px 20px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+
+.file-input-container label {
+    background-color: #007bff;
+    color: white;
+}
+
+.file-input-container label:hover {
+    background-color: #0056b3;
+}
+
+.file-input-container button {
+    background-color: #28a745;
+    color: white;
+    border: none;
+}
+
+.file-input-container button:hover {
+    background-color: #218838;
+}
+
+#graph-container {
+    width: 100%;
+    height: 500px;
+    border: 1px solid #ccc;
+    border-radius: 10px;
+    overflow: hidden;
+}

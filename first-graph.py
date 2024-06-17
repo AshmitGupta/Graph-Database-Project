@@ -41,6 +41,10 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 def index():
     return render_template('index.html')
 
+@app.route('/visualise')
+def visualise():
+    return render_template('visualise.html')
+
 @app.route('/gpt4-chat', methods=['POST'])
 def gpt4_chat():
     data = request.json

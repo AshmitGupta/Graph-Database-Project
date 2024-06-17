@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neo4j Graph Visualization</title>
+    <script src="https://cdn.jsdelivr.net/npm/neovis.js@2.0.0/dist/neovis.js"></script>
+    <link rel="stylesheet" href="static/visualise.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Upload XML File to Generate Neo4j Graph</h1>
+        <div class="file-input-container">
+            <input type="file" id="file-input" accept=".xml">
+            <label for="file-input">Choose File</label>
+            <button onclick="uploadFile()">Generate Graph</button>
+        </div>
+        <div id="graph-container"></div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
