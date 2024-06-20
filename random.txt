@@ -1,0 +1,70 @@
+import csv
+import xml.etree.ElementTree as ET
+
+def xml_to_csv(xml_file, csv_file):
+    tree = ET.parse(xml_file)
+    root = tree.getroot()
+
+    departments = []
+    managers = []
+    employees = []
+    projects = []
+
+    for dept in root.findall('department'):
+        dept_id = dept.get('id')
+        dept_name = dept.get('name')
+        departments.append([dept_id, dept_name])
+        
+        for mgr in dept.findall('manager'):
+            mgr_id = mgr.get('id')
+            mgr_name = mgr.get('name')
+            mgr_email = mgr.get('email')
+            managers.append([mgr_id, mgr_name, mgr_email, dept_id])
+            
+            for emp in mgr.findall('employee'):
+                emp_id = emp.get('id')
+                emp_name = emp.get('name')
+                emp_email = emp.get('email')
+                emp_position = emp.get('position')
+                employees.append([emp_id, emp_name, emp_email, emp_position, mgr_id])
+        
+        for proj in dept.findall('project'):
+            proj_id = proj.get('id')
+            proj_name = proj.get('name')
+            proj_start = proj.get('start_date')
+            proj_end = proj.get('end_date')
+            projects.append([proj_id, proj_name, proj_start, proj_end, dept_id])
+
+    write_csv('departments.csv', ['id', 'name'], departments)
+    write_csv('managers.csv', ['id', 'name', 'email', 'department_id'], managers)
+    write_csv('employees.csv', ['id', 'name', 'email', 'position', 'manager_id'], employees)
+    write_csv('projects.csv', ['id', 'name', 'start_date', 'end_date', 'department_id'], projects)
+
+def write_csv(file_name, fieldnames, rows):
+    with open(file_name, 'w', newline='') as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(fieldnames)
+        writer.writerows(rows)
+
+# Convert the XML file to CSV
+xml_to_csv('company_structure.xml', 'output.csv')
+
+
+<company>
+    <department id="1" name="Finance">
+        <manager id="101" name="Alice" email="alice@company.com">
+            <employee id="201" name="Bob" email="bob@company.com" position="Analyst"/>
+            <employee id="202" name="Charlie" email="charlie@company.com" position="Accountant"/>
+        </manager>
+        <project id="301" name="Budget Analysis" start_date="2024-01-01" end_date="2024-06-30"/>
+        <project id="302" name="Annual Report" start_date="2024-07-01" end_date="2024-12-31"/>
+    </department>
+    <department id="2" name="IT">
+        <manager id="102" name="David" email="david@company.com">
+            <employee id="203" name="Eve" email="eve@company.com" position="Developer"/>
+            <employee id="204" name="Frank" email="frank@company.com" position="System Administrator"/>
+        </manager>
+        <project id="303" name="Website Redesign" start_date="2024-01-15" end_date="2024-04-15"/>
+        <project id="304" name="Cybersecurity Upgrade" start_date="2024-05-01" end_date="2024-10-01"/>
+    </department>
+</company>
