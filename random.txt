@@ -68,3 +68,22 @@ xml_to_csv('company_structure.xml', 'output.csv')
         <project id="304" name="Cybersecurity Upgrade" start_date="2024-05-01" end_date="2024-10-01"/>
     </department>
 </company>
+
+
+LOAD CSV WITH HEADERS FROM 'file:///departments.csv' AS row
+MERGE (d:Department {id: row.id, name: row.name});
+LOAD CSV WITH HEADERS FROM 'file:///managers.csv' AS row
+MERGE (m:Manager {id: row.id, name: row.name, email: row.email})
+WITH m, row
+MATCH (d:Department {id: row.department_id})
+MERGE (d)-[:HAS_MANAGER]->(m);
+LOAD CSV WITH HEADERS FROM 'file:///employees.csv' AS row
+MERGE (e:Employee {id: row.id, name: row.name, email: row.email, position: row.position})
+WITH e, row
+MATCH (m:Manager {id: row.manager_id})
+MERGE (m)-[:HAS_EMPLOYEE]->(e);
+LOAD CSV WITH HEADERS FROM 'file:///projects.csv' AS row
+MERGE (p:Project {id: row.id, name: row.name, start_date: row.start_date, end_date: row.end_date})
+WITH p, row
+MATCH (d:Department {id: row.department_id})
+MERGE (d)-[:HAS_PROJECT]->(p);
