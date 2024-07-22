@@ -3,7 +3,7 @@ import xml.etree.ElementTree as ET
 import re
 
 # Connect to the Neo4j instance
-graph = Graph("bolt://localhost:7687", auth=("neo4j", "password"))
+graph = Graph("bolt://localhost:7687", auth=("neo4j", "password"), name="newDatabase")
 
 # List of XML files
 xml_files = [
@@ -18,7 +18,7 @@ def create_nodes_and_relationships(parent_node, element):
         if child.tag == 'effectivity':
             effectivity_node = Node(child.tag, name=child.tag)
             relationship = Relationship(parent_node, child.tag, effectivity_node)
-            reverse_relationship = Relationship(effectivity_node, f"has_{parent_node['name']}", parent_node)
+            reverse_relationship = Relationship(effectivity_node, "included_in", parent_node)
             graph.create(effectivity_node)
             graph.create(relationship)
             graph.create(reverse_relationship)
@@ -42,7 +42,7 @@ def create_nodes_and_relationships(parent_node, element):
                     airplane_node = Node("Airplane", name=airplane_type)
                     graph.create(airplane_node)
                     effectivity_relationship = Relationship(effectivity_node, "effects", airplane_node)
-                    reverse_effectivity_relationship = Relationship(airplane_node, f"affected_by", effectivity_node)
+                    reverse_effectivity_relationship = Relationship(airplane_node, "affected_by", effectivity_node)
                     graph.create(effectivity_relationship)
                     graph.create(reverse_effectivity_relationship)
                     print(f"Created Airplane node: {airplane_type}")
@@ -54,7 +54,7 @@ def create_nodes_and_relationships(parent_node, element):
                             line_number_node = Node("LineNumber", name=line_number)
                             graph.create(line_number_node)
                         line_relationship = Relationship(airplane_node, "includes", line_number_node)
-                        reverse_line_relationship = Relationship(line_number_node, f"included_in", airplane_node)
+                        reverse_line_relationship = Relationship(line_number_node, "included_in", airplane_node)
                         graph.create(line_relationship)
                         graph.create(reverse_line_relationship)
                         print(f"Created or connected to LineNumber node: {line_number}")
@@ -63,7 +63,7 @@ def create_nodes_and_relationships(parent_node, element):
             content = (child.text or "").strip()
             node = Node(child.tag, name=child.tag, content=content)
             relationship = Relationship(parent_node, child.tag, node)
-            reverse_relationship = Relationship(node, f"has_{parent_node['name']}", parent_node)
+            reverse_relationship = Relationship(node, "included_in", parent_node)
             graph.create(node)
             graph.create(relationship)
             graph.create(reverse_relationship)
