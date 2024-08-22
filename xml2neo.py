@@ -1,9 +1,8 @@
-from py2neo import Graph, Node, Relationship
-import xml.etree.ElementTree as ET
-import re
+from neo4j import GraphDatabase
 
 # Connect to the Neo4j instance
-graph = Graph("bolt://localhost:7687", auth=("neo4j", "password"))
+uri = "bolt://localhost:7687"
+driver = GraphDatabase.driver(uri, auth=("neo4j", "password"))
 
 # List of XML files
 xml_files = [
@@ -13,74 +12,115 @@ xml_files = [
 ]
 
 # Function to create nodes and relationships recursively
-def create_nodes_and_relationships(parent_node, element):
-    for child in element:
-        if child.tag == 'effectivity':
-            effectivity_node = Node(child.tag, name=child.tag)
-            relationship = Relationship(parent_node, child.tag, effectivity_node)
-            reverse_relationship = Relationship(effectivity_node, "included_in", parent_node)
-            graph.create(effectivity_node)
-            graph.create(relationship)
-            graph.create(reverse_relationship)
+def create_nodes_and_relationships(tx, parent_node_id, element, tag_name=None):
+    for child in element.splitlines():
+        child = child.strip()
+        if child.startswith('<effectivity>'):
+            effectivity_node_id = create_node(tx, 'effectivity', {"name": 'effectivity'})
+            create_relationship(tx, parent_node_id, effectivity_node_id, 'effectivity')
+            create_relationship(tx, effectivity_node_id, parent_node_id, "included_in")
 
-            airplanes_element = child.find('airplanes')
-            if airplanes_element is not None:
-                content = (airplanes_element.text or "").strip()
-                print(f"Airplanes content: {content}")
+        elif child.startswith('<airplanes>'):
+            airplanes_content = extract_content(child, 'airplanes')
+            print(f"Airplanes content: {airplanes_content}")
 
-                # Extract airplane types and line numbers
-                airplane_match = re.search(r'(.*?) Airplane\(s\), line number\(s\)', content)
-                if airplane_match:
-                    airplane_types = re.findall(r'(\d+-\d+)', airplane_match.group(1))
-                    line_numbers = re.findall(r'(\d+)', content[airplane_match.end():])
-                
-                print(f"Airplane types: {airplane_types}")
-                print(f"Line numbers: {line_numbers}")
-                
-                # Create nodes and relationships for each airplane type
-                for airplane_type in airplane_types:
-                    airplane_node = Node("Airplane", name=airplane_type)
-                    graph.create(airplane_node)
-                    effectivity_relationship = Relationship(effectivity_node, "effects", airplane_node)
-                    reverse_effectivity_relationship = Relationship(airplane_node, "affected_by", effectivity_node)
-                    graph.create(effectivity_relationship)
-                    graph.create(reverse_effectivity_relationship)
-                    print(f"Created Airplane node: {airplane_type}")
-                    
-                    # Create or connect to existing LineNumber nodes and relationships
-                    for line_number in line_numbers:
-                        line_number_node = graph.nodes.match("LineNumber", name=line_number).first()
-                        if line_number_node is None:
-                            line_number_node = Node("LineNumber", name=line_number)
-                            graph.create(line_number_node)
-                        line_relationship = Relationship(airplane_node, "includes", line_number_node)
-                        reverse_line_relationship = Relationship(line_number_node, "included_in", airplane_node)
-                        graph.create(line_relationship)
-                        graph.create(reverse_line_relationship)
-                        print(f"Created or connected to LineNumber node: {line_number}")
+            # Extract airplane types and line numbers
+            airplane_types, line_numbers = extract_airplanes_and_lines(airplanes_content)
+            print(f"Airplane types: {airplane_types}")
+            print(f"Line numbers: {line_numbers}")
+
+            # Create nodes and relationships for each airplane type
+            for airplane_type in airplane_types:
+                airplane_node_id = create_node(tx, "Airplane", {"name": airplane_type})
+                create_relationship(tx, effectivity_node_id, airplane_node_id, "effects")
+                create_relationship(tx, airplane_node_id, effectivity_node_id, "affected_by")
+                print(f"Created Airplane node: {airplane_type}")
+
+                # Create or connect to existing LineNumber nodes and relationships
+                for line_number in line_numbers:
+                    line_number_node_id = match_or_create_node(tx, "LineNumber", {"name": line_number})
+                    create_relationship(tx, airplane_node_id, line_number_node_id, "includes")
+                    create_relationship(tx, line_number_node_id, airplane_node_id, "included_in")
+                    print(f"Created or connected to LineNumber node: {line_number}")
         else:
-            # Handle other nodes normally
-            content = (child.text or "").strip()
-            node = Node(child.tag, name=child.tag, content=content)
-            relationship = Relationship(parent_node, child.tag, node)
-            reverse_relationship = Relationship(node, "included_in", parent_node)
-            graph.create(node)
-            graph.create(relationship)
-            graph.create(reverse_relationship)
-            create_nodes_and_relationships(node, child)
+            if child.startswith('<') and child.endswith('>'):
+                tag_name = child[1:-1].split()[0]
+                content = extract_content(child, tag_name)
+                if content:
+                    node_id = create_node(tx, tag_name, {"name": tag_name, "content": content})
+                    create_relationship(tx, parent_node_id, node_id, tag_name)
+                    create_relationship(tx, node_id, parent_node_id, "included_in")
+                else:
+                    nested_content = extract_nested_content(child, tag_name)
+                    node_id = create_node(tx, tag_name, {"name": tag_name})
+                    create_relationship(tx, parent_node_id, node_id, tag_name)
+                    create_relationship(tx, node_id, parent_node_id, "included_in")
+                    create_nodes_and_relationships(tx, node_id, nested_content, tag_name)
+
+# Function to create a node
+def create_node(tx, label, properties):
+    result = tx.run(f"CREATE (n:{label} $properties) RETURN id(n)", properties=properties)
+    return result.single()[0]
+
+# Function to create a relationship
+def create_relationship(tx, from_node_id, to_node_id, relationship_type):
+    tx.run(
+        "MATCH (a), (b) WHERE id(a) = $from_node_id AND id(b) = $to_node_id "
+        "CREATE (a)-[r:" + relationship_type + "]->(b)",
+        from_node_id=from_node_id, to_node_id=to_node_id
+    )
+
+# Function to match or create a node
+def match_or_create_node(tx, label, properties):
+    result = tx.run(
+        f"MATCH (n:{label} $properties) RETURN id(n)",
+        properties=properties
+    )
+    record = result.single()
+    if record:
+        return record[0]
+    else:
+        return create_node(tx, label, properties)
+
+# Function to extract content between tags
+def extract_content(line, tag):
+    start = f'<{tag}>'
+    end = f'</{tag}>'
+    return line[line.find(start) + len(start):line.find(end)].strip()
+
+# Function to extract nested content
+def extract_nested_content(line, tag):
+    start = f'<{tag}>'
+    end = f'</{tag}>'
+    return line[line.find(start) + len(start):line.rfind(end)].strip()
+
+# Function to extract airplane types and line numbers from content
+def extract_airplanes_and_lines(content):
+    airplane_types = []
+    line_numbers = []
+
+    if 'Airplane(s), line number(s)' in content:
+        parts = content.split('Airplane(s), line number(s)')
+        airplane_types = parts[0].strip().split()  # Split airplane types by spaces
+        line_numbers = [line.strip() for line in parts[1].strip().split(',')]  # Split line numbers by commas
+
+    return airplane_types, line_numbers
 
 # Process each XML file
-for xml_file in xml_files:
-    # Parse the XML file
-    tree = ET.parse(xml_file)
-    root = tree.getroot()
+with driver.session(database="newDatabase") as session:
+    for xml_file in xml_files:
+        # Read the XML file content as a string
+        with open(xml_file, 'r') as file:
+            xml_content = file.read()
 
-    # Create the main service bulletin node
-    bulletin_number = root.find('./header/number').text
-    bulletin_node = Node("ServiceBulletin", name=bulletin_number)
-    graph.create(bulletin_node)
+        # Create the main service bulletin node
+        bulletin_number = extract_content(xml_content, 'number')
+        bulletin_node_id = session.write_transaction(create_node, "ServiceBulletin", {"name": bulletin_number})
 
-    # Create nodes and relationships from the XML
-    create_nodes_and_relationships(bulletin_node, root)
+        # Create nodes and relationships from the XML
+        session.write_transaction(create_nodes_and_relationships, bulletin_node_id, xml_content)
 
 print("Graph created successfully.")
+
+# Close the driver connection
+driver.close()
