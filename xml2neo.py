@@ -3,7 +3,7 @@ import xml.etree.ElementTree as ET
 import re
 
 # Connect to the Neo4j instance
-graph = Graph("bolt://localhost:7687", auth=("neo4j", "password"), name="newDatabase")
+graph = Graph("bolt://localhost:7687", auth=("neo4j", "password"))
 
 # List of XML files
 xml_files = [
