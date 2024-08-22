@@ -16,7 +16,8 @@ xml_files = [
 # Function to create a tagged node
 def create_tagged_node(tx, label, properties, tag):
     properties[tag] = True
-    result = tx.run(f"CREATE (n:{label} $properties) RETURN id(n)", properties=properties)
+    cypher_query = f"CREATE (n:{label} {{{', '.join(f'{key}: $props.{key}' for key in properties.keys())}}}) RETURN id(n)"
+    result = tx.run(cypher_query, props=properties)
     return result.single()[0]
 
 # Function to create relationships
@@ -30,8 +31,8 @@ def create_relationship(tx, from_node_id, to_node_id, relationship_type):
 # Function to match or create a tagged node
 def match_or_create_tagged_node(tx, label, properties, tag):
     result = tx.run(
-        f"MATCH (n:{label} $properties) RETURN id(n)",
-        properties=properties
+        f"MATCH (n:{label} $props) RETURN id(n)",
+        props=properties
     )
     record = result.single()
     if record:
