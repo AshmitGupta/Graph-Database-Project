@@ -12,28 +12,35 @@ async function createGraphFromXML(xmlData) {
         const parser = new xml2js.Parser({ explicitArray: false, trim: true });
         const result = await parser.parseStringPromise(xmlData);
 
+        // Helper function to sanitize relationship names
+        function sanitizeLabel(label) {
+            return label.replace(/[^a-zA-Z0-9_]/g, '_').toUpperCase();
+        }
+
         async function createNodesAndRelationships(parentNode, parentNodeLabel, obj) {
             for (const key in obj) {
                 if (obj.hasOwnProperty(key)) {
                     const nodeLabel = isNaN(key.charAt(0)) ? key : `Tag_${key}`;
+                    const sanitizedLabel = sanitizeLabel(nodeLabel); // Sanitize label
                     const content = typeof obj[key] === 'string' ? obj[key] : null;
 
                     if (content) {
                         await session.writeTransaction(tx => tx.run(
-                            `MERGE (n:\`${nodeLabel}\`:\`${uniqueLabel}\` {name: $name, content: $content})`,
+                            `MERGE (n:\`${sanitizedLabel}\`:\`${uniqueLabel}\` {name: $name, content: $content})`,
                             { name: nodeLabel, content: content }
                         ));
                     } else {
                         await session.writeTransaction(tx => tx.run(
-                            `MERGE (n:\`${nodeLabel}\`:\`${uniqueLabel}\` {name: $name})`,
+                            `MERGE (n:\`${sanitizedLabel}\`:\`${uniqueLabel}\` {name: $name})`,
                             { name: nodeLabel }
                         ));
                     }
 
                     if (parentNode && parentNodeLabel) {
+                        const sanitizedParentLabel = sanitizeLabel(parentNodeLabel);
                         await session.writeTransaction(tx => tx.run(
-                            `MATCH (parent:\`${parentNodeLabel}\`:\`${uniqueLabel}\` {name: $parentName}), (child:\`${nodeLabel}\`:\`${uniqueLabel}\` {name: $childName})
-                            MERGE (parent)-[:HAS_${nodeLabel.toUpperCase()}]->(child)
+                            `MATCH (parent:\`${sanitizedParentLabel}\`:\`${uniqueLabel}\` {name: $parentName}), (child:\`${sanitizedLabel}\`:\`${uniqueLabel}\` {name: $childName})
+                            MERGE (parent)-[:HAS_${sanitizedLabel}]->(child)
                             MERGE (child)-[:IS_PART_OF]->(parent)`,
                             { parentName: parentNodeLabel, childName: nodeLabel }
                         ));
