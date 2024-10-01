@@ -32,11 +32,12 @@ async function createGraphFromXML(xmlData) {
                             { name: titleContent }
                         ));
 
-                        // If there is a parent TITLE, create a relationship to this child TITLE
+                        // If there is a parent TITLE, create a dynamic relationship to this child TITLE
                         if (parentTitleNode) {
+                            const dynamicRelationship = `HAS_${sanitizeLabel(titleContent)}`;
                             await session.writeTransaction(tx => tx.run(
                                 `MATCH (parent:\`${parentNodeLabel}\`:\`${uniqueLabel}\` {name: $parentName}), (child:\`${titleNodeLabel}\`:\`${uniqueLabel}\` {name: $childName})
-                                MERGE (parent)-[:HAS_TITLE]->(child)`,
+                                MERGE (parent)-[:${dynamicRelationship}]->(child)`,
                                 { parentName: parentTitleNode, childName: titleContent }
                             ));
                         }
