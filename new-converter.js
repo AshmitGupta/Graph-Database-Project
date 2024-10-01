@@ -2,6 +2,9 @@ const neo4j = require('neo4j-driver');
 const xml2js = require('xml2js');
 const fs = require('fs');
 
+// Set to keep track of processed nodes to avoid duplicate creation/connection
+const processedNodes = new Set();
+
 async function createGraphFromXML(xmlData) {
     const driver = neo4j.driver('bolt://127.0.0.1:7687', neo4j.auth.basic('neo4j', 'password'), { encrypted: 'ENCRYPTION_OFF' });
     const session = driver.session();
@@ -32,6 +35,15 @@ async function createGraphFromXML(xmlData) {
                     if (key.toUpperCase() === 'TITLE') {
                         const titleContent = obj[key];  // Title content (e.g., "Title 1")
                         const titleNodeLabel = sanitizeLabel(titleContent);  // Node label based on title content
+
+                        // Check if the node has already been processed
+                        if (processedNodes.has(titleContent)) {
+                            console.log(`Node "${titleContent}" already processed, skipping.`);
+                            continue;
+                        }
+
+                        // Mark this node as processed
+                        processedNodes.add(titleContent);
 
                         // Log the creation of the TITLE node
                         console.log(`Creating TITLE node for "${titleContent}"`);
