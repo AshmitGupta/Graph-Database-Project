@@ -12,106 +12,65 @@ async function createGraphFromXML(xmlData) {
         const parser = new xml2js.Parser({ explicitArray: false, trim: true });
         const result = await parser.parseStringPromise(xmlData);
 
-        // Helper function to sanitize relationship names
+        // Helper function to sanitize labels
         function sanitizeLabel(label) {
             return label.replace(/[^a-zA-Z0-9_]/g, '_').toUpperCase();
         }
 
-        // Specialized logic for handling tables
-        async function handleTableStructure(headers, rows) {
-            // Create header nodes
-            for (const header of headers) {
-                const sanitizedHeader = sanitizeLabel(header);
-                await session.writeTransaction(tx => tx.run(
-                    `MERGE (h:\`${sanitizedHeader}\`:\`${uniqueLabel}\` {name: $name})`,
-                    { name: header }
-                ));
-            }
-
-            // Create row and cell relationships
-            for (let i = 0; i < rows.length; i++) {
-                const row = rows[i];
-                const rowNodeLabel = `Row_${i + 1}`;
-
-                // Create row node
-                await session.writeTransaction(tx => tx.run(
-                    `MERGE (r:\`${rowNodeLabel}\`:\`${uniqueLabel}\`)`
-                ));
-
-                // Create cells and link to headers and row
-                for (let j = 0; j < row.length; j++) {
-                    const cellContent = sanitizeLabel(row[j]);
-                    const header = headers[j] || `Header_${j}`;
-
-                    // Create cell content node
-                    await session.writeTransaction(tx => tx.run(
-                        `MERGE (c:\`${cellContent}\`:\`${uniqueLabel}\` {name: $name})`,
-                        { name: row[j] }
-                    ));
-
-                    // Link header to cell content
-                    await session.writeTransaction(tx => tx.run(
-                        `MATCH (h:\`${sanitizeLabel(header)}\`:\`${uniqueLabel}\`), (c:\`${cellContent}\`:\`${uniqueLabel}\`)
-                        MERGE (h)-[:HEADER_OF]->(c)`
-                    ));
-
-                    // Link row to cell content
-                    await session.writeTransaction(tx => tx.run(
-                        `MATCH (r:\`${rowNodeLabel}\`:\`${uniqueLabel}\`), (c:\`${cellContent}\`:\`${uniqueLabel}\`)
-                        MERGE (r)-[:CONTAINS]->(c)`
-                    ));
-                }
-            }
-        }
-
-        async function createNodesAndRelationships(parentNode, parentNodeLabel, obj) {
+        // Function to create nodes and relationships for TITLE nodes
+        async function createTitleNodesAndRelationships(parentTitleNode, parentNodeLabel, obj) {
             for (const key in obj) {
                 if (obj.hasOwnProperty(key)) {
-                    const nodeLabel = isNaN(key.charAt(0)) ? key : `Tag_${key}`;
-                    const sanitizedLabel = sanitizeLabel(nodeLabel); // Sanitize label
-                    const content = typeof obj[key] === 'string' ? obj[key] : null;
+                    // If the key is a TITLE, create a node for it
+                    if (key.toUpperCase() === 'TITLE') {
+                        const titleContent = obj[key];  // Title content (e.g., "Title 1")
+                        const titleNodeLabel = sanitizeLabel(titleContent);  // Node label based on title content
 
-                    // Handle tables if THEAD/TBODY tags are found
-                    if (key.toUpperCase() === 'THEAD') {
-                        const headers = obj[key].ROW.CELL.map(cell => cell.PARA); // Extract headers
-                        const tbody = obj.TBODY;
-                        const rows = tbody.ROW.map(row => row.CELL.map(cell => cell.PARA)); // Extract row cells
-                        await handleTableStructure(headers, rows);
-                        continue; // Skip further processing for this key since we handle it here
+                        // Create the TITLE node
+                        await session.writeTransaction(tx => tx.run(
+                            `MERGE (n:\`${titleNodeLabel}\`:\`${uniqueLabel}\` {name: $name})`,
+                            { name: titleContent }
+                        ));
+
+                        // If there is a parent TITLE, create a relationship to this child TITLE
+                        if (parentTitleNode) {
+                            await session.writeTransaction(tx => tx.run(
+                                `MATCH (parent:\`${parentNodeLabel}\`:\`${uniqueLabel}\` {name: $parentName}), (child:\`${titleNodeLabel}\`:\`${uniqueLabel}\` {name: $childName})
+                                MERGE (parent)-[:HAS_TITLE]->(child)`,
+                                { parentName: parentTitleNode, childName: titleContent }
+                            ));
+                        }
+
+                        // Concatenate content from other tags within the same structure (e.g., PARA, REASON)
+                        let concatenatedContent = '';
+                        for (const subKey in obj) {
+                            if (subKey !== 'TITLE' && typeof obj[subKey] === 'string') {
+                                concatenatedContent += obj[subKey] + ' ';  // Add space between each concatenated content
+                            }
+                        }
+
+                        // Update the TITLE node with the concatenated content
+                        await session.writeTransaction(tx => tx.run(
+                            `MATCH (n:\`${titleNodeLabel}\`:\`${uniqueLabel}\` {name: $name})
+                            SET n.content = $content`,
+                            { name: titleContent, content: concatenatedContent.trim() }
+                        ));
+
+                        // Recursively process nested objects
+                        await createTitleNodesAndRelationships(titleContent, titleNodeLabel, obj);
                     }
 
-                    if (content) {
-                        await session.writeTransaction(tx => tx.run(
-                            `MERGE (n:\`${sanitizedLabel}\`:\`${uniqueLabel}\` {name: $name, content: $content})`,
-                            { name: nodeLabel, content: content }
-                        ));
-                    } else {
-                        await session.writeTransaction(tx => tx.run(
-                            `MERGE (n:\`${sanitizedLabel}\`:\`${uniqueLabel}\` {name: $name})`,
-                            { name: nodeLabel }
-                        ));
-                    }
-
-                    // Parent-child relationship, without bidirectional relationship
-                    if (parentNode && parentNodeLabel) {
-                        const sanitizedParentLabel = sanitizeLabel(parentNodeLabel);
-                        await session.writeTransaction(tx => tx.run(
-                            `MATCH (parent:\`${sanitizedParentLabel}\`:\`${uniqueLabel}\` {name: $parentName}), (child:\`${sanitizedLabel}\`:\`${uniqueLabel}\` {name: $childName})
-                            MERGE (parent)-[:HAS_${sanitizedLabel}]->(child)`,
-                            { parentName: parentNodeLabel, childName: nodeLabel }
-                        ));
-                    }
-
-                    // Recursively process nested objects
+                    // Recursively process nested objects, skip TITLE nodes as we already handle them
                     if (typeof obj[key] === 'object') {
-                        await createNodesAndRelationships(nodeLabel, nodeLabel, obj[key]);
+                        await createTitleNodesAndRelationships(parentTitleNode, parentNodeLabel, obj[key]);
                     }
                 }
             }
         }
 
+        // Start the graph creation with the root node
         const rootLabel = Object.keys(result)[0];
-        await createNodesAndRelationships(null, null, result[rootLabel]);
+        await createTitleNodesAndRelationships(null, null, result[rootLabel]);
 
         console.log('Graph created successfully with unique label:', uniqueLabel);
     } catch (error) {
@@ -122,6 +81,7 @@ async function createGraphFromXML(xmlData) {
     }
 }
 
+// Read the XML file
 fs.readFile('boeing_service_bulletin_1.xml', 'utf8', (err, data) => {
     if (err) {
         console.error('Error reading XML file:', err);
