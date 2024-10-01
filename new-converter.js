@@ -20,6 +20,25 @@ async function createGraphFromXML(xmlData) {
             return label.replace(/[^a-zA-Z0-9_]/g, '_').toUpperCase();
         }
 
+        // Helper function to recursively gather content under a TITLE node
+        function gatherContent(node) {
+            let content = '';
+
+            // Recursively go through each child node
+            for (const key in node) {
+                if (node.hasOwnProperty(key)) {
+                    if (typeof node[key] === 'string') {
+                        content += node[key] + ' '; // Accumulate string content
+                    } else if (typeof node[key] === 'object') {
+                        // If it's an object (nested structure), recurse into it
+                        content += gatherContent(node[key]);
+                    }
+                }
+            }
+
+            return content.trim(); // Remove extra spaces
+        }
+
         // Create the initial "Service Bulletin" node
         console.log('Creating Service Bulletin node with content "000"');
         await session.writeTransaction(tx => tx.run(
@@ -74,21 +93,16 @@ async function createGraphFromXML(xmlData) {
                             console.log(`Connected "${parentTitleNode}" to "${titleContent}" with "${dynamicRelationship}".`);
                         }
 
-                        // Concatenate content from other tags within the same structure (e.g., PARA, REASON)
-                        let concatenatedContent = '';
-                        console.log(`Concatenating content for "${titleContent}"`);
-                        for (const subKey in obj) {
-                            if (subKey !== 'TITLE' && typeof obj[subKey] === 'string') {
-                                concatenatedContent += obj[subKey] + ' ';  // Add space between each concatenated content
-                            }
-                        }
-                        console.log(`Content for "${titleContent}" concatenated: "${concatenatedContent.trim()}"`);
+                        // Concatenate content from other tags within the same structure (including nested objects)
+                        console.log(`Gathering content for "${titleContent}"`);
+                        const concatenatedContent = gatherContent(obj);
+                        console.log(`Content for "${titleContent}" gathered: "${concatenatedContent}"`);
 
                         // Update the TITLE node with the concatenated content
                         await session.writeTransaction(tx => tx.run(
                             `MATCH (n:\`${titleNodeLabel}\`:\`${uniqueLabel}\` {name: $name})
                             SET n.content = $content`,
-                            { name: titleContent, content: concatenatedContent.trim() }
+                            { name: titleContent, content: concatenatedContent }
                         ));
                         console.log(`Updated content for "${titleContent}".`);
 
