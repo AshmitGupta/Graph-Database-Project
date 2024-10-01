@@ -17,39 +17,40 @@ async function createGraphFromXML(xmlData) {
             return label.replace(/[^a-zA-Z0-9_]/g, '_').toUpperCase();
         }
 
-        // Helper function to derive meaningful label from content
-        function getNodeLabel(content) {
-            return content.replace(/\s+/g, '_').substring(0, 20); // Truncate and sanitize
+        // Helper function to derive meaningful label from tag name (non-table)
+        function getTagLabel(tag) {
+            return sanitizeLabel(tag); // Just sanitize the tag name to be the label
         }
 
-        // Recursive function for general parent-child relationships
+        // Recursive function for general parent-child relationships (for non-table nodes)
         async function createNodesAndRelationships(parentNode, parentNodeLabel, obj, headers = []) {
             for (const key in obj) {
                 if (obj.hasOwnProperty(key)) {
                     const content = typeof obj[key] === 'string' ? obj[key] : null;
-                    const nodeLabel = getNodeLabel(content || key); // Meaningful node label
-                    const sanitizedLabel = sanitizeLabel(nodeLabel); // Sanitize label
+                    const tagName = getTagLabel(key); // Use the XML tag name as the label
+                    const nodeLabel = tagName; // The label will be based on the tag name
 
-                    // Handle case for non-structural elements (standard nodes)
+                    // Handle non-table elements
                     if (content) {
+                        // Create node for the tag (name is the tag, content is the text inside)
                         await session.writeTransaction(tx => tx.run(
-                            `MERGE (n:\`${sanitizedLabel}\`:\`${uniqueLabel}\` {name: $name, content: $content})`,
-                            { name: nodeLabel, content: content }
+                            `MERGE (n:\`${nodeLabel}\`:\`${uniqueLabel}\` {name: $name, content: $content})`,
+                            { name: key, content: content }
                         ));
                     } else {
                         await session.writeTransaction(tx => tx.run(
-                            `MERGE (n:\`${sanitizedLabel}\`:\`${uniqueLabel}\` {name: $name})`,
-                            { name: nodeLabel }
+                            `MERGE (n:\`${nodeLabel}\`:\`${uniqueLabel}\` {name: $name})`,
+                            { name: key }
                         ));
                     }
 
-                    // If parent node exists, create relationship
+                    // If there's a parent, link it to the current node
                     if (parentNode && parentNodeLabel) {
                         const sanitizedParentLabel = sanitizeLabel(parentNodeLabel);
                         await session.writeTransaction(tx => tx.run(
-                            `MATCH (parent:\`${sanitizedParentLabel}\`:\`${uniqueLabel}\` {name: $parentName}), (child:\`${sanitizedLabel}\`:\`${uniqueLabel}\` {name: $childName})
-                            MERGE (parent)-[:HAS_${sanitizedLabel}]->(child)`,
-                            { parentName: parentNodeLabel, childName: nodeLabel }
+                            `MATCH (parent:\`${sanitizedParentLabel}\`:\`${uniqueLabel}\` {name: $parentName}), (child:\`${nodeLabel}\`:\`${uniqueLabel}\` {name: $childName})
+                            MERGE (parent)-[:HAS_${nodeLabel}]->(child)`,
+                            { parentName: parentNodeLabel, childName: key }
                         ));
                     }
 
@@ -75,7 +76,7 @@ async function createGraphFromXML(xmlData) {
 
                             const cells = rows[i].CELL;
                             for (let j = 0; j < cells.length; j++) {
-                                const cellContent = cells[j].PARA ? getNodeLabel(cells[j].PARA) : `Empty_Content`;
+                                const cellContent = cells[j].PARA ? sanitizeLabel(cells[j].PARA.replace(/\s+/g, '_').substring(0, 20)) : `Empty_Content`;
                                 const header = headers[j] || `Header_${j}`; // Link to the corresponding header
 
                                 // Create Cell Content
