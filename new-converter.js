@@ -89,16 +89,20 @@ async function createGraphFromXML(xmlData) {
                         const titleNodeLabel = formatNodeLabel(sanitizedRelationship);  // Node label based on title content
                         const nodeName = titleNodeLabel; // Set the name property to match the formatted label
 
-                        // Create a unique key based on parentTitleNode and the node's title name
-                        const uniqueKey = parentTitleNode ? `${parentTitleNode}->${titleNodeLabel}` : titleNodeLabel;
+                        // Gather and update content for the node
+                        console.log(`Gathering content for "${titleNodeLabel}"`);
+                        const concatenatedContent = gatherContent(obj);
+                        
+                        // Create a unique key based on the node's name and content
+                        const uniqueKey = `${nodeName}-${concatenatedContent.trim()}`;
 
-                        // Check if the node with this name under the same parent has already been processed
+                        // Check if the node with this name and content has already been processed
                         if (processedNodes.has(uniqueKey)) {
-                            console.log(`Node "${uniqueKey}" already processed, skipping.`);
+                            console.log(`Node "${titleNodeLabel}" with content already processed, skipping.`);
                             continue;
                         }
 
-                        // Mark this node as processed with the uniqueKey
+                        // Mark this node as processed with the uniqueKey (name + content)
                         processedNodes.add(uniqueKey);
 
                         // Log the creation of the TITLE node
@@ -129,10 +133,6 @@ async function createGraphFromXML(xmlData) {
                             ));
                             console.log(`Connected "${parentNodeLabel}" to "${titleNodeLabel}" with "${dynamicRelationship}".`);
                         }
-
-                        // Gather and update content for the node
-                        console.log(`Gathering content for "${titleNodeLabel}"`);
-                        const concatenatedContent = gatherContent(obj);
 
                         // Remove all occurrences of <ColSpec/> from the content
                         const cleanedContent = concatenatedContent.replace(/<ColSpec\s*\/>/g, '');
