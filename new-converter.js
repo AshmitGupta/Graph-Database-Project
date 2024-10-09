@@ -31,21 +31,27 @@ async function createGraphFromXML(xmlData) {
                 .join('_'); // Join the parts back together with an underscore
         }
 
+        // Helper function to recursively gather content under a TITLE node
         function gatherContent(node) {
             let content = '';
-        
+
             // Function to handle the <TABLE> tag
             function handleTableNode(tableNode) {
                 // Convert the <TABLE> node back to XML string, ignoring attributes
                 const builder = new xml2js.Builder({ headless: true, renderOpts: { pretty: false }, xmldec: { version: '1.0', encoding: 'UTF-8' } });
-        
+
                 // Remove attributes from the tableNode structure
                 const sanitizedTable = JSON.parse(JSON.stringify(tableNode, (key, value) => (key.startsWith('$') ? undefined : value)));
-        
+
+                // Remove <ColSpec/> from the TABLE structure if present
+                if (sanitizedTable.TABLE && Array.isArray(sanitizedTable.TABLE.ColSpec)) {
+                    delete sanitizedTable.TABLE.ColSpec;
+                }
+
                 // Convert the sanitized table structure back to an XML string
                 return builder.buildObject({ TABLE: sanitizedTable.TABLE }).trim();
             }
-        
+
             // Recursively go through each child node
             for (const key in node) {
                 if (node.hasOwnProperty(key)) {
@@ -61,10 +67,9 @@ async function createGraphFromXML(xmlData) {
                     }
                 }
             }
-        
+
             return content.trim(); // Remove extra spaces
         }
-
 
         // Create the initial "Service Bulletin" node
         console.log('Creating Service Bulletin node with content "000"');
@@ -125,13 +130,17 @@ async function createGraphFromXML(xmlData) {
                         // Gather and update content for the node
                         console.log(`Gathering content for "${titleNodeLabel}"`);
                         const concatenatedContent = gatherContent(obj);
-                        console.log(`Content for "${titleNodeLabel}" gathered: "${concatenatedContent}"`);
 
-                        // Update the TITLE node with the concatenated content
+                        // Remove all occurrences of <ColSpec/> from the content
+                        const cleanedContent = concatenatedContent.replace(/<ColSpec\s*\/>/g, '');
+
+                        console.log(`Content for "${titleNodeLabel}" gathered: "${cleanedContent}"`);
+
+                        // Update the TITLE node with the concatenated and cleaned content
                         await session.writeTransaction(tx => tx.run(
                             `MATCH (n:\`${titleNodeLabel}\`:\`${uniqueLabel}\` {name: $name})
                             SET n.content = $content`,
-                            { name: nodeName, content: concatenatedContent }
+                            { name: nodeName, content: cleanedContent }
                         ));
                         console.log(`Updated content for "${titleNodeLabel}".`);
 
