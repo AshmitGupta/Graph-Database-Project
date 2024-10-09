@@ -89,14 +89,17 @@ async function createGraphFromXML(xmlData) {
                         const titleNodeLabel = formatNodeLabel(sanitizedRelationship);  // Node label based on title content
                         const nodeName = titleNodeLabel; // Set the name property to match the formatted label
 
-                        // Check if the node has already been processed
-                        if (processedNodes.has(titleNodeLabel)) {
-                            console.log(`Node "${titleNodeLabel}" already processed, skipping.`);
+                        // Create a unique key based on parentTitleNode and the node's title name
+                        const uniqueKey = parentTitleNode ? `${parentTitleNode}->${titleNodeLabel}` : titleNodeLabel;
+
+                        // Check if the node with this name under the same parent has already been processed
+                        if (processedNodes.has(uniqueKey)) {
+                            console.log(`Node "${uniqueKey}" already processed, skipping.`);
                             continue;
                         }
 
-                        // Mark this node as processed
-                        processedNodes.add(titleNodeLabel);
+                        // Mark this node as processed with the uniqueKey
+                        processedNodes.add(uniqueKey);
 
                         // Log the creation of the TITLE node
                         console.log(`Creating TITLE node for "${titleNodeLabel}"`);
