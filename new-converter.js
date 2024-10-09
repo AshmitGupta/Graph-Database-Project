@@ -20,6 +20,11 @@ async function createGraphFromXML(xmlData) {
             return label.replace(/[^a-zA-Z0-9_]/g, '_').replace(/(^|_)([a-z])/g, (match, p1, p2) => p2.toUpperCase()).replace(/_/g, '');
         }
 
+        // Helper function to sanitize relationships
+        function sanitizeRelationship(label) {
+            return label.replace(/[^a-zA-Z0-9]/g, '_').toUpperCase();
+        }
+
         // Helper function to recursively gather content under a TITLE node
         function gatherContent(node) {
             let content = '';
@@ -77,13 +82,13 @@ async function createGraphFromXML(xmlData) {
                             console.log(`Connecting TITLE "${titleContent}" to Service Bulletin`);
                             await session.writeTransaction(tx => tx.run(
                                 `MATCH (sb:ServiceBulletin:\`${uniqueLabel}\` {name: 'Service Bulletin'}), (child:\`${titleNodeLabel}\`:\`${uniqueLabel}\` {name: $childName})
-                                MERGE (sb)-[:HAS_${sanitizeLabel(titleContent).toUpperCase()}]->(child)`,
+                                MERGE (sb)-[:HAS_${sanitizeRelationship(titleContent)}]->(child)`,
                                 { childName: titleContent }
                             ));
                             console.log(`Connected "${titleContent}" to Service Bulletin.`);
                         } else {
                             // If there's a parent TITLE, create a dynamic relationship to this child TITLE
-                            const dynamicRelationship = `HAS_${sanitizeLabel(titleContent).toUpperCase()}`;
+                            const dynamicRelationship = `HAS_${sanitizeRelationship(titleContent)}`;
                             console.log(`Connecting TITLE "${parentTitleNode}" to child TITLE "${titleContent}" with relationship "${dynamicRelationship}"`);
                             await session.writeTransaction(tx => tx.run(
                                 `MATCH (parent:\`${parentNodeLabel}\`:\`${uniqueLabel}\` {name: $parentName}), (child:\`${titleNodeLabel}\`:\`${uniqueLabel}\` {name: $childName})
