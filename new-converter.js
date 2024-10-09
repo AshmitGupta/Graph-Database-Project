@@ -15,19 +15,20 @@ async function createGraphFromXML(xmlData) {
         const parser = new xml2js.Parser({ explicitArray: false, trim: true });
         const result = await parser.parseStringPromise(xmlData);
 
-        // Helper function to sanitize labels
-        function sanitizeLabel(label) {
-            return label.replace(/[^a-zA-Z0-9]/g, '_').replace(/(^|_)([a-z])/g, (match, p1, p2) => p2.toUpperCase()).replace(/_/g, '');
-        }
-
         // Helper function to sanitize relationships
         function sanitizeRelationship(label) {
             return label.replace(/[^a-zA-Z0-9]/g, '_').toUpperCase();
         }
 
-        // Helper function to format node labels correctly
+        // Helper function to format node labels correctly by converting the relationship name to UpperCamelCase
         function formatNodeLabel(label) {
-            return sanitizeRelationship(label).replace(/^HAS_/, '').replace(/_/g, ' ').replace(/(^|\s)([a-zA-Z])/g, (match, p1, p2) => p2.toUpperCase()).replace(/\s/g, '_');
+            // Remove "HAS_" prefix and convert to UpperCamelCase
+            return label
+                .replace(/^HAS_/, '') // Remove the "HAS_" prefix
+                .toLowerCase() // Convert to lowercase
+                .split('_') // Split by underscore
+                .map(word => word.charAt(0).toUpperCase() + word.slice(1)) // Capitalize first letter of each word
+                .join('_'); // Join the parts back together with an underscore
         }
 
         // Helper function to recursively gather content under a TITLE node
@@ -37,10 +38,10 @@ async function createGraphFromXML(xmlData) {
             // Recursively go through each child node
             for (const key in node) {
                 if (node.hasOwnProperty(key)) {
-                    if (typeof node[key] === 'string' && key !== '$') {
+                    if (typeof node[key] === 'string' && !key.startsWith('$')) { // Skip keys starting with '$' (i.e., attributes)
                         content += node[key] + ' '; // Accumulate string content
-                    } else if (typeof node[key] === 'object') {
-                        // If it's an object (nested structure), recurse into it
+                    } else if (typeof node[key] === 'object' && !key.startsWith('$')) {
+                        // If it's an object (nested structure) and not an attribute, recurse into it
                         content += gatherContent(node[key]);
                     }
                 }
@@ -52,7 +53,7 @@ async function createGraphFromXML(xmlData) {
         // Create the initial "Service Bulletin" node
         console.log('Creating Service Bulletin node with content "000"');
         await session.writeTransaction(tx => tx.run(
-            `MERGE (sb:ServiceBulletin:\`${uniqueLabel}\` {name: 'Service Bulletin', content: '000'})`
+            `MERGE (sb:ServiceBulletin:\`${uniqueLabel}\` {name: 'ServiceBulletin', content: '000'})`
         ));
         console.log('Service Bulletin node created.');
 
@@ -63,66 +64,68 @@ async function createGraphFromXML(xmlData) {
                     // If the key is a TITLE, create a node for it
                     if (key.toUpperCase() === 'TITLE') {
                         const titleContent = obj[key];  // Title content (e.g., "Title 1")
-                        const titleNodeLabel = formatNodeLabel(titleContent);  // Node label based on title content
+                        const sanitizedRelationship = sanitizeRelationship(titleContent);
+                        const titleNodeLabel = formatNodeLabel(sanitizedRelationship);  // Node label based on title content
+                        const nodeName = titleNodeLabel; // Set the name property to match the formatted label
 
                         // Check if the node has already been processed
-                        if (processedNodes.has(titleContent)) {
-                            console.log(`Node "${titleContent}" already processed, skipping.`);
+                        if (processedNodes.has(titleNodeLabel)) {
+                            console.log(`Node "${titleNodeLabel}" already processed, skipping.`);
                             continue;
                         }
 
                         // Mark this node as processed
-                        processedNodes.add(titleContent);
+                        processedNodes.add(titleNodeLabel);
 
                         // Log the creation of the TITLE node
-                        console.log(`Creating TITLE node for "${titleContent}"`);
+                        console.log(`Creating TITLE node for "${titleNodeLabel}"`);
                         await session.writeTransaction(tx => tx.run(
                             `MERGE (n:\`${titleNodeLabel}\`:\`${uniqueLabel}\` {name: $name})`,
-                            { name: titleContent }
+                            { name: nodeName } // Set the node name to match the formatted label
                         ));
-                        console.log(`TITLE node "${titleContent}" created.`);
+                        console.log(`TITLE node "${titleNodeLabel}" created.`);
 
                         // If no parent TITLE (top-level), connect to the Service Bulletin node
                         if (!parentTitleNode) {
-                            console.log(`Connecting TITLE "${titleContent}" to Service Bulletin`);
+                            console.log(`Connecting TITLE "${titleNodeLabel}" to Service Bulletin`);
                             await session.writeTransaction(tx => tx.run(
-                                `MATCH (sb:ServiceBulletin:\`${uniqueLabel}\` {name: 'Service Bulletin'}), (child:\`${titleNodeLabel}\`:\`${uniqueLabel}\` {name: $childName})
-                                MERGE (sb)-[:HAS_${sanitizeRelationship(titleContent)}]->(child)`,
-                                { childName: titleContent }
+                                `MATCH (sb:ServiceBulletin:\`${uniqueLabel}\` {name: 'ServiceBulletin'}), (child:\`${titleNodeLabel}\`:\`${uniqueLabel}\` {name: $childName})
+                                MERGE (sb)-[:HAS_${sanitizedRelationship}]->(child)`,
+                                { childName: nodeName } // Use the new formatted nodeName for connections
                             ));
-                            console.log(`Connected "${titleContent}" to Service Bulletin.`);
+                            console.log(`Connected "${titleNodeLabel}" to Service Bulletin.`);
                         } else {
                             // If there's a parent TITLE, create a dynamic relationship to this child TITLE
-                            const dynamicRelationship = `HAS_${sanitizeRelationship(titleContent)}`;
-                            console.log(`Connecting TITLE "${parentTitleNode}" to child TITLE "${titleContent}" with relationship "${dynamicRelationship}"`);
+                            const dynamicRelationship = `HAS_${sanitizedRelationship}`;
+                            console.log(`Connecting TITLE "${parentNodeLabel}" to child TITLE "${titleNodeLabel}" with relationship "${dynamicRelationship}"`);
                             await session.writeTransaction(tx => tx.run(
                                 `MATCH (parent:\`${parentNodeLabel}\`:\`${uniqueLabel}\` {name: $parentName}), (child:\`${titleNodeLabel}\`:\`${uniqueLabel}\` {name: $childName})
                                 MERGE (parent)-[:${dynamicRelationship}]->(child)`,
-                                { parentName: parentTitleNode, childName: titleContent }
+                                { parentName: parentNodeLabel, childName: nodeName } // Use the new formatted nodeName for connections
                             ));
-                            console.log(`Connected "${parentTitleNode}" to "${titleContent}" with "${dynamicRelationship}".`);
+                            console.log(`Connected "${parentNodeLabel}" to "${titleNodeLabel}" with "${dynamicRelationship}".`);
                         }
 
-                        // Concatenate content from other tags within the same structure (including nested objects)
-                        console.log(`Gathering content for "${titleContent}"`);
+                        // Gather and update content for the node
+                        console.log(`Gathering content for "${titleNodeLabel}"`);
                         const concatenatedContent = gatherContent(obj);
-                        console.log(`Content for "${titleContent}" gathered: "${concatenatedContent}"`);
+                        console.log(`Content for "${titleNodeLabel}" gathered: "${concatenatedContent}"`);
 
                         // Update the TITLE node with the concatenated content
                         await session.writeTransaction(tx => tx.run(
                             `MATCH (n:\`${titleNodeLabel}\`:\`${uniqueLabel}\` {name: $name})
                             SET n.content = $content`,
-                            { name: titleContent, content: concatenatedContent }
+                            { name: nodeName, content: concatenatedContent }
                         ));
-                        console.log(`Updated content for "${titleContent}".`);
+                        console.log(`Updated content for "${titleNodeLabel}".`);
 
                         // Recursively process nested objects, passing the current title as the parent
-                        console.log(`Processing nested content for "${titleContent}"...`);
-                        await createTitleNodesAndRelationships(titleContent, titleNodeLabel, obj);
+                        console.log(`Processing nested content for "${titleNodeLabel}"...`);
+                        await createTitleNodesAndRelationships(titleNodeLabel, titleNodeLabel, obj);
                     }
 
                     // Recursively process nested objects, skip TITLE nodes as we already handle them
-                    if (typeof obj[key] === 'object') {
+                    if (typeof obj[key] === 'object' && key.toUpperCase() !== 'TITLE') {
                         await createTitleNodesAndRelationships(parentTitleNode, parentNodeLabel, obj[key]);
                     }
                 }
@@ -131,8 +134,9 @@ async function createGraphFromXML(xmlData) {
 
         // Start the graph creation with the root node (e.g., "SUBJECT")
         console.log('Starting graph creation process...');
-        const rootLabel = Object.keys(result)[0];
-        await createTitleNodesAndRelationships(null, null, result[rootLabel]);
+        const rootKey = Object.keys(result)[0];
+        const rootObj = result[rootKey];
+        await createTitleNodesAndRelationships(null, null, rootObj);
 
         console.log('Graph created successfully with unique label:', uniqueLabel);
     } catch (error) {
