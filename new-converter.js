@@ -37,7 +37,7 @@ async function createGraphFromXML(xmlData) {
             // Recursively go through each child node
             for (const key in node) {
                 if (node.hasOwnProperty(key)) {
-                    if (typeof node[key] === 'string') {
+                    if (typeof node[key] === 'string' && key !== '$') {
                         content += node[key] + ' '; // Accumulate string content
                     } else if (typeof node[key] === 'object') {
                         // If it's an object (nested structure), recurse into it
