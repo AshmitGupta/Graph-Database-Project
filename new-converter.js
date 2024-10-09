@@ -31,24 +31,40 @@ async function createGraphFromXML(xmlData) {
                 .join('_'); // Join the parts back together with an underscore
         }
 
-        // Helper function to recursively gather content under a TITLE node
         function gatherContent(node) {
             let content = '';
-
+        
+            // Function to handle the <TABLE> tag
+            function handleTableNode(tableNode) {
+                // Convert the <TABLE> node back to XML string, ignoring attributes
+                const builder = new xml2js.Builder({ headless: true, renderOpts: { pretty: false }, xmldec: { version: '1.0', encoding: 'UTF-8' } });
+        
+                // Remove attributes from the tableNode structure
+                const sanitizedTable = JSON.parse(JSON.stringify(tableNode, (key, value) => (key.startsWith('$') ? undefined : value)));
+        
+                // Convert the sanitized table structure back to an XML string
+                return builder.buildObject({ TABLE: sanitizedTable.TABLE }).trim();
+            }
+        
             // Recursively go through each child node
             for (const key in node) {
                 if (node.hasOwnProperty(key)) {
-                    if (typeof node[key] === 'string' && !key.startsWith('$')) { // Skip keys starting with '$' (i.e., attributes)
-                        content += node[key] + ' '; // Accumulate string content
+                    if (key.toUpperCase() === 'TABLE') {
+                        // If a <TABLE> tag is found, handle it and return the full table structure
+                        content += handleTableNode({ TABLE: node[key] });
+                    } else if (typeof node[key] === 'string' && !key.startsWith('$')) {
+                        // Accumulate string content, ignoring attributes
+                        content += node[key] + ' ';
                     } else if (typeof node[key] === 'object' && !key.startsWith('$')) {
                         // If it's an object (nested structure) and not an attribute, recurse into it
                         content += gatherContent(node[key]);
                     }
                 }
             }
-
+        
             return content.trim(); // Remove extra spaces
         }
+
 
         // Create the initial "Service Bulletin" node
         console.log('Creating Service Bulletin node with content "000"');
