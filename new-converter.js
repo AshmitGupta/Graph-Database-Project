@@ -17,12 +17,17 @@ async function createGraphFromXML(xmlData) {
 
         // Helper function to sanitize labels
         function sanitizeLabel(label) {
-            return label.replace(/[^a-zA-Z0-9_]/g, '_').replace(/(^|_)([a-z])/g, (match, p1, p2) => p2.toUpperCase()).replace(/_/g, '');
+            return label.replace(/[^a-zA-Z0-9]/g, '_').replace(/(^|_)([a-z])/g, (match, p1, p2) => p2.toUpperCase()).replace(/_/g, '');
         }
 
         // Helper function to sanitize relationships
         function sanitizeRelationship(label) {
             return label.replace(/[^a-zA-Z0-9]/g, '_').toUpperCase();
+        }
+
+        // Helper function to format node labels correctly
+        function formatNodeLabel(label) {
+            return sanitizeRelationship(label).replace(/^HAS_/, '').replace(/_/g, ' ').replace(/(^|\s)([a-zA-Z])/g, (match, p1, p2) => p2.toUpperCase()).replace(/\s/g, '_');
         }
 
         // Helper function to recursively gather content under a TITLE node
@@ -58,7 +63,7 @@ async function createGraphFromXML(xmlData) {
                     // If the key is a TITLE, create a node for it
                     if (key.toUpperCase() === 'TITLE') {
                         const titleContent = obj[key];  // Title content (e.g., "Title 1")
-                        const titleNodeLabel = sanitizeLabel(titleContent);  // Node label based on title content
+                        const titleNodeLabel = formatNodeLabel(titleContent);  // Node label based on title content
 
                         // Check if the node has already been processed
                         if (processedNodes.has(titleContent)) {
