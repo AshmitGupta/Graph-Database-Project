@@ -9,50 +9,43 @@ async function createGraphFromXML(xmlData) {
     const driver = neo4j.driver('bolt://127.0.0.1:7687', neo4j.auth.basic('neo4j', 'password'), { encrypted: 'ENCRYPTION_OFF' });
     const session = driver.session();
 
-    const uniqueLabel = 'Batch_2024_08_26';
+    const uniqueLabel = 'Batch_2024_08_26'; // Original batch label
 
     try {
         const parser = new xml2js.Parser({ explicitArray: false, trim: true });
         const result = await parser.parseStringPromise(xmlData);
 
-        // Extract the "docnbr" attribute from "AirplaneSB" if available
-        let docNumber = 'ServiceBulletin'; // Default name
+        let docNumber = 'ServiceBulletin';
         if (result && result.AirplaneSB && result.AirplaneSB.$ && result.AirplaneSB.$.docnbr) {
-            docNumber = result.AirplaneSB.$.docnbr; // Set docNumber if "docnbr" exists
+            docNumber = result.AirplaneSB.$.docnbr;
             console.log(`Found docnbr: ${docNumber}`);
         } else {
             console.log('No docnbr attribute found; defaulting to "ServiceBulletin"');
         }
 
-        // Create the initial "Service Bulletin" node with docNumber as name
-        console.log(`Creating Service Bulletin node with name "${docNumber}"`);
+        console.log(`Creating Service Bulletin node with docnbr "${docNumber}" and label "${uniqueLabel}"`);
         await session.writeTransaction(tx => tx.run(
-            `MERGE (sb:ServiceBulletin:\`${uniqueLabel}\` {name: $name, content: '000'})`,
-            { name: docNumber }
+            `MERGE (sb:ServiceBulletin:\`${uniqueLabel}\` {name: 'ServiceBulletin', content: '000', docnbr: $docnbr})`,
+            { docnbr: docNumber }
         ));
         console.log('Service Bulletin node created.');
 
-        // Helper function to sanitize relationships
         function sanitizeRelationship(label) {
             return label.replace(/[^a-zA-Z0-9]/g, '_').toUpperCase();
         }
 
-        // Helper function to format node labels correctly by converting the relationship name to UpperCamelCase
         function formatNodeLabel(label) {
-            // Remove "HAS_" prefix and convert to UpperCamelCase
             return label
-                .replace(/^HAS_/, '') // Remove the "HAS_" prefix
-                .toLowerCase() // Convert to lowercase
-                .split('_') // Split by underscore
-                .map(word => word.charAt(0).toUpperCase() + word.slice(1)) // Capitalize first letter of each word
-                .join('_'); // Join the parts back together with an underscore
+                .replace(/^HAS_/, '')
+                .toLowerCase()
+                .split('_')
+                .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                .join('_');
         }
 
-        // Helper function to recursively gather content under a TITLE node
         function gatherContent(node) {
             let content = '';
 
-            // Function to handle the <TABLE> tag
             function handleTableNode(tableNode) {
                 const builder = new xml2js.Builder({ headless: true, renderOpts: { pretty: false }, xmldec: { version: '1.0', encoding: 'UTF-8' } });
 
@@ -80,7 +73,6 @@ async function createGraphFromXML(xmlData) {
             return content.trim();
         }
 
-        // Function to create nodes and relationships for TITLE nodes
         async function createTitleNodesAndRelationships(parentTitleNode, parentNodeLabel, obj) {
             for (const key in obj) {
                 if (obj.hasOwnProperty(key)) {
@@ -90,12 +82,10 @@ async function createGraphFromXML(xmlData) {
                         const titleNodeLabel = formatNodeLabel(sanitizedRelationship);
                         const nodeName = titleNodeLabel;
 
-                        // Gather and update content for the node
                         console.log(`Gathering content for "${titleNodeLabel}"`);
                         const concatenatedContent = gatherContent(obj);
-                        
-                        const uniqueKey = `${nodeName}-${concatenatedContent.trim()}`;
 
+                        const uniqueKey = `${nodeName}-${concatenatedContent.trim()}`;
                         if (processedNodes.has(uniqueKey)) {
                             console.log(`Node "${titleNodeLabel}" with content already processed, skipping.`);
                             continue;
@@ -103,29 +93,28 @@ async function createGraphFromXML(xmlData) {
 
                         processedNodes.add(uniqueKey);
 
-                        // Log the creation of the TITLE node
-                        console.log(`Creating TITLE node for "${titleNodeLabel}"`);
+                        console.log(`Creating TITLE node for "${titleNodeLabel}" with label "${uniqueLabel}"`);
                         await session.writeTransaction(tx => tx.run(
-                            `MERGE (n:\`${titleNodeLabel}\`:\`${uniqueLabel}\` {name: $name})`,
-                            { name: nodeName }
+                            `MERGE (n:\`${titleNodeLabel}\`:\`${uniqueLabel}\` {name: $name, docnbr: $docnbr})`,
+                            { name: nodeName, docnbr: docNumber }
                         ));
                         console.log(`TITLE node "${titleNodeLabel}" created.`);
 
                         if (!parentTitleNode) {
                             console.log(`Connecting TITLE "${titleNodeLabel}" to Service Bulletin`);
                             await session.writeTransaction(tx => tx.run(
-                                `MATCH (sb:ServiceBulletin:\`${uniqueLabel}\` {name: $name}), (child:\`${titleNodeLabel}\`:\`${uniqueLabel}\` {name: $childName})
+                                `MATCH (sb:ServiceBulletin:\`${uniqueLabel}\` {docnbr: $sbDocNbr}), (child:\`${titleNodeLabel}\`:\`${uniqueLabel}\` {name: $childName, docnbr: $docnbr})
                                 MERGE (sb)-[:HAS_${sanitizedRelationship}]->(child)`,
-                                { name: docNumber, childName: nodeName }
+                                { sbDocNbr: docNumber, childName: nodeName, docnbr: docNumber }
                             ));
                             console.log(`Connected "${titleNodeLabel}" to Service Bulletin.`);
                         } else {
                             const dynamicRelationship = `HAS_${sanitizedRelationship}`;
                             console.log(`Connecting TITLE "${parentNodeLabel}" to child TITLE "${titleNodeLabel}" with relationship "${dynamicRelationship}"`);
                             await session.writeTransaction(tx => tx.run(
-                                `MATCH (parent:\`${parentNodeLabel}\`:\`${uniqueLabel}\` {name: $parentName}), (child:\`${titleNodeLabel}\`:\`${uniqueLabel}\` {name: $childName})
+                                `MATCH (parent:\`${parentNodeLabel}\`:\`${uniqueLabel}\` {name: $parentName, docnbr: $docnbr}), (child:\`${titleNodeLabel}\`:\`${uniqueLabel}\` {name: $childName, docnbr: $docnbr})
                                 MERGE (parent)-[:${dynamicRelationship}]->(child)`,
-                                { parentName: parentNodeLabel, childName: nodeName }
+                                { parentName: parentNodeLabel, childName: nodeName, docnbr: docNumber }
                             ));
                             console.log(`Connected "${parentNodeLabel}" to "${titleNodeLabel}" with "${dynamicRelationship}".`);
                         }
@@ -133,11 +122,10 @@ async function createGraphFromXML(xmlData) {
                         const cleanedContent = concatenatedContent.replace(/<ColSpec\s*\/>/g, '');
 
                         console.log(`Content for "${titleNodeLabel}" gathered: "${cleanedContent}"`);
-
                         await session.writeTransaction(tx => tx.run(
-                            `MATCH (n:\`${titleNodeLabel}\`:\`${uniqueLabel}\` {name: $name})
+                            `MATCH (n:\`${titleNodeLabel}\`:\`${uniqueLabel}\` {name: $name, docnbr: $docnbr})
                             SET n.content = $content`,
-                            { name: nodeName, content: cleanedContent }
+                            { name: nodeName, content: cleanedContent, docnbr: docNumber }
                         ));
                         console.log(`Updated content for "${titleNodeLabel}".`);
 
@@ -157,7 +145,7 @@ async function createGraphFromXML(xmlData) {
         const rootObj = result[rootKey];
         await createTitleNodesAndRelationships(null, null, rootObj);
 
-        console.log('Graph created successfully with unique label:', uniqueLabel);
+        console.log('Graph created successfully with docnbr property:', docNumber);
     } catch (error) {
         console.error('Error creating graph:', error);
     } finally {
