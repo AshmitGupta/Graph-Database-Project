@@ -15,6 +15,23 @@ async function createGraphFromXML(xmlData) {
         const parser = new xml2js.Parser({ explicitArray: false, trim: true });
         const result = await parser.parseStringPromise(xmlData);
 
+        // Extract the "docnbr" attribute from "AirplaneSB" if available
+        let docNumber = 'ServiceBulletin'; // Default name
+        if (result && result.AirplaneSB && result.AirplaneSB.$ && result.AirplaneSB.$.docnbr) {
+            docNumber = result.AirplaneSB.$.docnbr; // Set docNumber if "docnbr" exists
+            console.log(`Found docnbr: ${docNumber}`);
+        } else {
+            console.log('No docnbr attribute found; defaulting to "ServiceBulletin"');
+        }
+
+        // Create the initial "Service Bulletin" node with docNumber as name
+        console.log(`Creating Service Bulletin node with name "${docNumber}"`);
+        await session.writeTransaction(tx => tx.run(
+            `MERGE (sb:ServiceBulletin:\`${uniqueLabel}\` {name: $name, content: '000'})`,
+            { name: docNumber }
+        ));
+        console.log('Service Bulletin node created.');
+
         // Helper function to sanitize relationships
         function sanitizeRelationship(label) {
             return label.replace(/[^a-zA-Z0-9]/g, '_').toUpperCase();
@@ -37,109 +54,86 @@ async function createGraphFromXML(xmlData) {
 
             // Function to handle the <TABLE> tag
             function handleTableNode(tableNode) {
-                // Convert the <TABLE> node back to XML string, ignoring attributes
                 const builder = new xml2js.Builder({ headless: true, renderOpts: { pretty: false }, xmldec: { version: '1.0', encoding: 'UTF-8' } });
 
-                // Remove attributes from the tableNode structure
                 const sanitizedTable = JSON.parse(JSON.stringify(tableNode, (key, value) => (key.startsWith('$') ? undefined : value)));
 
-                // Remove <ColSpec/> from the TABLE structure if present
                 if (sanitizedTable.TABLE && Array.isArray(sanitizedTable.TABLE.ColSpec)) {
                     delete sanitizedTable.TABLE.ColSpec;
                 }
 
-                // Convert the sanitized table structure back to an XML string
                 return builder.buildObject({ TABLE: sanitizedTable.TABLE }).trim();
             }
 
-            // Recursively go through each child node
             for (const key in node) {
                 if (node.hasOwnProperty(key)) {
                     if (key.toUpperCase() === 'TABLE') {
-                        // If a <TABLE> tag is found, handle it and return the full table structure
                         content += handleTableNode({ TABLE: node[key] });
                     } else if (typeof node[key] === 'string' && !key.startsWith('$')) {
-                        // Accumulate string content, ignoring attributes
                         content += node[key] + ' ';
                     } else if (typeof node[key] === 'object' && !key.startsWith('$')) {
-                        // If it's an object (nested structure) and not an attribute, recurse into it
                         content += gatherContent(node[key]);
                     }
                 }
             }
 
-            return content.trim(); // Remove extra spaces
+            return content.trim();
         }
-
-        // Create the initial "Service Bulletin" node
-        console.log('Creating Service Bulletin node with content "000"');
-        await session.writeTransaction(tx => tx.run(
-            `MERGE (sb:ServiceBulletin:\`${uniqueLabel}\` {name: 'ServiceBulletin', content: '000'})`
-        ));
-        console.log('Service Bulletin node created.');
 
         // Function to create nodes and relationships for TITLE nodes
         async function createTitleNodesAndRelationships(parentTitleNode, parentNodeLabel, obj) {
             for (const key in obj) {
                 if (obj.hasOwnProperty(key)) {
-                    // If the key is a TITLE, create a node for it
                     if (key.toUpperCase() === 'TITLE') {
-                        const titleContent = obj[key];  // Title content (e.g., "Title 1")
+                        const titleContent = obj[key];
                         const sanitizedRelationship = sanitizeRelationship(titleContent);
-                        const titleNodeLabel = formatNodeLabel(sanitizedRelationship);  // Node label based on title content
-                        const nodeName = titleNodeLabel; // Set the name property to match the formatted label
+                        const titleNodeLabel = formatNodeLabel(sanitizedRelationship);
+                        const nodeName = titleNodeLabel;
 
                         // Gather and update content for the node
                         console.log(`Gathering content for "${titleNodeLabel}"`);
                         const concatenatedContent = gatherContent(obj);
                         
-                        // Create a unique key based on the node's name and content
                         const uniqueKey = `${nodeName}-${concatenatedContent.trim()}`;
 
-                        // Check if the node with this name and content has already been processed
                         if (processedNodes.has(uniqueKey)) {
                             console.log(`Node "${titleNodeLabel}" with content already processed, skipping.`);
                             continue;
                         }
 
-                        // Mark this node as processed with the uniqueKey (name + content)
                         processedNodes.add(uniqueKey);
 
                         // Log the creation of the TITLE node
                         console.log(`Creating TITLE node for "${titleNodeLabel}"`);
                         await session.writeTransaction(tx => tx.run(
                             `MERGE (n:\`${titleNodeLabel}\`:\`${uniqueLabel}\` {name: $name})`,
-                            { name: nodeName } // Set the node name to match the formatted label
+                            { name: nodeName }
                         ));
                         console.log(`TITLE node "${titleNodeLabel}" created.`);
 
-                        // If no parent TITLE (top-level), connect to the Service Bulletin node
                         if (!parentTitleNode) {
                             console.log(`Connecting TITLE "${titleNodeLabel}" to Service Bulletin`);
                             await session.writeTransaction(tx => tx.run(
-                                `MATCH (sb:ServiceBulletin:\`${uniqueLabel}\` {name: 'ServiceBulletin'}), (child:\`${titleNodeLabel}\`:\`${uniqueLabel}\` {name: $childName})
+                                `MATCH (sb:ServiceBulletin:\`${uniqueLabel}\` {name: $name}), (child:\`${titleNodeLabel}\`:\`${uniqueLabel}\` {name: $childName})
                                 MERGE (sb)-[:HAS_${sanitizedRelationship}]->(child)`,
-                                { childName: nodeName } // Use the new formatted nodeName for connections
+                                { name: docNumber, childName: nodeName }
                             ));
                             console.log(`Connected "${titleNodeLabel}" to Service Bulletin.`);
                         } else {
-                            // If there's a parent TITLE, create a dynamic relationship to this child TITLE
                             const dynamicRelationship = `HAS_${sanitizedRelationship}`;
                             console.log(`Connecting TITLE "${parentNodeLabel}" to child TITLE "${titleNodeLabel}" with relationship "${dynamicRelationship}"`);
                             await session.writeTransaction(tx => tx.run(
                                 `MATCH (parent:\`${parentNodeLabel}\`:\`${uniqueLabel}\` {name: $parentName}), (child:\`${titleNodeLabel}\`:\`${uniqueLabel}\` {name: $childName})
                                 MERGE (parent)-[:${dynamicRelationship}]->(child)`,
-                                { parentName: parentNodeLabel, childName: nodeName } // Use the new formatted nodeName for connections
+                                { parentName: parentNodeLabel, childName: nodeName }
                             ));
                             console.log(`Connected "${parentNodeLabel}" to "${titleNodeLabel}" with "${dynamicRelationship}".`);
                         }
 
-                        // Remove all occurrences of <ColSpec/> from the content
                         const cleanedContent = concatenatedContent.replace(/<ColSpec\s*\/>/g, '');
 
                         console.log(`Content for "${titleNodeLabel}" gathered: "${cleanedContent}"`);
 
-                        // Update the TITLE node with the concatenated and cleaned content
                         await session.writeTransaction(tx => tx.run(
                             `MATCH (n:\`${titleNodeLabel}\`:\`${uniqueLabel}\` {name: $name})
                             SET n.content = $content`,
@@ -147,12 +141,10 @@ async function createGraphFromXML(xmlData) {
                         ));
                         console.log(`Updated content for "${titleNodeLabel}".`);
 
-                        // Recursively process nested objects, passing the current title as the parent
                         console.log(`Processing nested content for "${titleNodeLabel}"...`);
                         await createTitleNodesAndRelationships(titleNodeLabel, titleNodeLabel, obj);
                     }
 
-                    // Recursively process nested objects, skip TITLE nodes as we already handle them
                     if (typeof obj[key] === 'object' && key.toUpperCase() !== 'TITLE') {
                         await createTitleNodesAndRelationships(parentTitleNode, parentNodeLabel, obj[key]);
                     }
@@ -160,7 +152,6 @@ async function createGraphFromXML(xmlData) {
             }
         }
 
-        // Start the graph creation with the root node (e.g., "SUBJECT")
         console.log('Starting graph creation process...');
         const rootKey = Object.keys(result)[0];
         const rootObj = result[rootKey];
@@ -175,7 +166,6 @@ async function createGraphFromXML(xmlData) {
     }
 }
 
-// Read the XML file
 fs.readFile('boeing_service_bulletin_1.xml', 'utf8', (err, data) => {
     if (err) {
         console.error('Error reading XML file:', err);
