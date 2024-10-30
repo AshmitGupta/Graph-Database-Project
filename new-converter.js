@@ -30,6 +30,17 @@ async function createGraphFromXML(xmlData) {
         ));
         console.log('Service Bulletin node created.');
 
+        // Define the registration variable
+        const registration = 'ABCDEFGH';
+        
+        // Connect the Service Bulletin to the matching Aircraft node
+        await session.writeTransaction(tx => tx.run(
+            `MATCH (sb:ServiceBulletin {docnbr: $docnbr}), (ac:Aircraft {registration: $registration})
+            MERGE (sb)-[:APPLIES_TO]->(ac)`,
+            { docnbr: docNumber, registration: registration }
+        ));
+        console.log(`Connected Service Bulletin "${docNumber}" to Aircraft with registration "${registration}".`);
+
         function sanitizeRelationship(label) {
             return label.replace(/[^a-zA-Z0-9]/g, '_').toUpperCase();
         }
