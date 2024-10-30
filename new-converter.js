@@ -25,7 +25,7 @@ async function createGraphFromXML(xmlData) {
 
         console.log(`Creating Service Bulletin node with docnbr "${docNumber}" and label "${uniqueLabel}"`);
         await session.writeTransaction(tx => tx.run(
-            `MERGE (sb:ServiceBulletin:\`${uniqueLabel}\` {name: 'ServiceBulletin', content: '000', docnbr: $docnbr})`,
+            `MERGE (sb:ServiceBulletin:\`${uniqueLabel}\` {name: $docnbr, content: '000', docnbr: $docnbr})`,
             { docnbr: docNumber }
         ));
         console.log('Service Bulletin node created.');
