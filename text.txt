@@ -1,0 +1,87 @@
+1. Project Overview
+The Neo4j RAG (Retrieval-Augmented Generation) chatbot is designed to enhance maintenance and operational decision-making by providing mechanics and personnel with instant answers regarding Service Bulletins (SBs). It integrates a Neo4j knowledge graph with GPT-4 to generate context-aware responses, leveraging a RESTful API for secure data retrieval and visualization.
+
+Goals:
+Provide quick and accurate answers to SB-related queries.
+Streamline maintenance workflows by connecting SBs with the Illustrated Parts Catalog (IPC) and other relevant datasets.
+Enable easy access to structured and unstructured data through a chatbot interface.
+2. System Architecture
+Key Components:
+Neo4j Knowledge Graph: Stores the SBs, IPC, and related data.
+GPT-4 Integration: Processes natural language queries and generates responses using graph data.
+RESTful API: Facilitates data retrieval and chatbot communication.
+Frontend: A user-friendly web interface for mechanics and personnel.
+Architecture Diagram:
+(Include a simplified architecture diagram if possible.)
+
+3. Technology Stack
+Backend:
+Neo4j Database: Knowledge graph storage.
+Python: Backend development with Flask.
+Neo4j Driver: Enables communication with the Neo4j database.
+GPT-4 API: For natural language processing.
+Frontend:
+Flask: Web application framework.
+HTML/CSS/JavaScript: Frontend interface design.
+Deployment:
+Microsoft Azure: Cloud hosting.
+Kubernetes: Container orchestration.
+4. Data Sources and Integration
+Service Bulletins (SB): XML data parsed to extract critical attributes like docnbr.
+Illustrated Parts Catalog (IPC): Links aircraft parts to relevant SBs.
+External Documents: Additional maintenance records and manuals.
+Data Ingestion Process:
+Parse XML data using a Python script.
+Populate Neo4j graph nodes and relationships.
+Validate data integrity and ensure alignment with graph schema.
+5. Knowledge Graph Schema
+Key Nodes:
+Service Bulletin: Attributes: docnbr, title, date, etc.
+Aircraft Part: Attributes: part_number, description, etc.
+Aircraft Model: Attributes: model_name, year, etc.
+Relationships:
+IMPACTS: Connects Service Bulletin to Aircraft Part.
+BELONGS_TO: Links Aircraft Part to Aircraft Model.
+Cypher Query Example:
+cypher
+Copy code
+MATCH (sb:ServiceBulletin)-[:IMPACTS]->(part:AircraftPart)
+WHERE sb.docnbr = "SB1234"
+RETURN sb, part;
+6. AI Model Integration
+GPT-4 Setup:
+Input: User query with context (e.g., "What is the impact of SB1234 on the landing gear?").
+Processing: GPT-4 accesses the Neo4j knowledge graph for context before generating a response.
+Output: A structured, conversational response.
+Example Workflow:
+User query is parsed by the API.
+Relevant Cypher query is generated.
+Neo4j retrieves data.
+GPT-4 combines retrieved data with additional NLP.
+7. Frontend Implementation
+Features:
+Search bar for queries.
+Display of SB details and related parts.
+Chatbot interface for Q&A.
+Framework:
+Flask routes render the HTML pages and handle API requests.
+8. Deployment and Infrastructure
+Environment: Dockerized containers for backend and database.
+Kubernetes: Handles scaling and fault tolerance.
+Azure Blob Storage: Stores large SB files.
+CI/CD: Automated pipelines for deployment using GitHub Actions.
+9. Maintenance and Troubleshooting
+Common Issues:
+Neo4j Connection Errors: Verify credentials and database health.
+API Timeout: Optimize Cypher queries and GPT-4 response times.
+Data Inconsistencies: Re-run ingestion scripts and validate schema.
+Tools:
+Neo4j Browser for graph visualization.
+Azure Monitor for infrastructure diagnostics.
+10. Future Development Suggestions
+Add a voice interface for hands-free queries.
+Incorporate additional datasets, like maintenance logs.
+Use embeddings for more robust AI responses.
+Develop mobile compatibility for on-site mechanics.
+11. Contact Information
+For further assistance, reach out to the current project owner or refer to the original project repository/documentation:
