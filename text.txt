@@ -85,3 +85,57 @@ Use embeddings for more robust AI responses.
 Develop mobile compatibility for on-site mechanics.
 11. Contact Information
 For further assistance, reach out to the current project owner or refer to the original project repository/documentation:
+
+
+# Step 1: Ensure Prerequisites
+# Make sure you have the following installed:
+# 1. Python (>=3.8) with required libraries.
+# 2. Node.js (>=14.0) with npm.
+# 3. Neo4j running locally or remotely with proper credentials.
+
+# Note: These are the current Neo4j credentials used in the project.
+# Feel free to change them in the code if needed:
+# NEO4J_URI = "bolt://localhost:7687"
+# NEO4J_USER = "neo4j"
+# NEO4J_PASSWORD = "password"
+
+# Step 2: Run `generate_graph.py`
+# This script populates the Neo4j database with dummy data.
+
+# Navigate to the project directory in the terminal:
+cd /path/to/HACKATHON
+
+# Install dependencies for Python:
+# If you have a `requirements.txt`, install dependencies:
+pip install -r requirements.txt
+
+# Otherwise, ensure you have libraries like `neo4j` installed:
+pip install neo4j
+
+# Run the `generate_graph.py` script:
+python generate_graph.py
+# Verify that the Neo4j database gets populated with dummy data.
+
+# Step 3: Run the Backend with `main.py` using Uvicorn
+# The backend likely serves the Neo4j data or exposes an API.
+
+# Ensure FastAPI or required libraries are installed:
+pip install fastapi uvicorn
+
+# Run `main.py` using `uvicorn`:
+uvicorn main:app --reload
+# The `main:app` points to the FastAPI app instance in `main.py`.
+# By default, the backend will run at `http://127.0.0.1:8000`.
+
+# Step 4: Run the Frontend with `npm start`
+# The React frontend connects to the backend and displays data.
+
+# Navigate to the `src` or project root folder (ensure `package.json` exists):
+cd /path/to/HACKATHON
+
+# Install Node.js dependencies:
+npm install
+
+# Start the React development server:
+npm start
+# By default, the frontend will run at `http://localhost:3000`.
